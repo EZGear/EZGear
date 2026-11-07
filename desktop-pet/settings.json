@@ -1,0 +1,11 @@
+{
+  "scale": 1.0,
+  "max_pets": 20,
+  "characters": {
+    "Eren": 1,
+    "Mikasa": 1
+  },
+  "follow": {
+    "Mikasa": "Eren"
+  }
+}
