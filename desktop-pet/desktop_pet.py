@@ -65,6 +65,8 @@ DEFAULT_SETTINGS = {
     "lap": {"sitter": "Mikasa", "lier": "Eren"},
     # har necha daqiqada soatni aytadi (0 = o'chirilgan)
     "clock_every_min": 5,
+    # kompyuter yoqilganda (Windows'ga kirganda) avtomatik ishga tushish
+    "autostart": True,
 }
 
 # Shimeji rasm raqamlari bo'yicha animatsiyalar: (rasm raqami, necha tik)
@@ -116,6 +118,99 @@ def load_settings():
         except (OSError, ValueError):
             pass
     return settings
+
+
+def save_setting(key, value):
+    """settings.json ichidagi bitta qiymatni o'zgartirib saqlaydi."""
+    data = {}
+    if os.path.isfile(SETTINGS_FILE):
+        try:
+            with open(SETTINGS_FILE, encoding="utf-8") as f:
+                data = json.load(f)
+        except (OSError, ValueError):
+            data = {}
+    if not isinstance(data, dict):
+        data = {}
+    data[key] = value
+    try:
+        with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+            f.write("\n")
+    except OSError:
+        pass
+
+
+# --------------------------------------------------------------------------
+# Windows: avtomatik ishga tushish va bitta nusxa
+# --------------------------------------------------------------------------
+
+RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
+APP_NAME = "DesktopPet"
+
+
+def autostart_command():
+    if getattr(sys, "frozen", False):
+        return f'"{sys.executable}"'
+    exe = sys.executable
+    pyw = os.path.join(os.path.dirname(exe), "pythonw.exe")
+    if os.path.isfile(pyw):
+        exe = pyw  # qora oyna (konsol) chiqmasligi uchun
+    return f'"{exe}" "{os.path.abspath(__file__)}"'
+
+
+def get_autostart():
+    if not IS_WIN:
+        return False
+    try:
+        import winreg
+
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, RUN_KEY) as k:
+            value, _ = winreg.QueryValueEx(k, APP_NAME)
+            return bool(value)
+    except OSError:
+        return False
+
+
+def set_autostart(on):
+    """Windows'ga kirganda ishga tushadiganlar ro'yxatiga qo'shadi/olib tashlaydi."""
+    if not IS_WIN:
+        return False
+    try:
+        import winreg
+
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, RUN_KEY, 0,
+                            winreg.KEY_SET_VALUE) as k:
+            if on:
+                winreg.SetValueEx(k, APP_NAME, 0, winreg.REG_SZ, autostart_command())
+            else:
+                try:
+                    winreg.DeleteValue(k, APP_NAME)
+                except FileNotFoundError:
+                    pass
+        return True
+    except OSError:
+        return False
+
+
+_MUTEX = None
+
+
+def already_running():
+    """Dastur allaqachon ochiq bo'lsa True (ikki marta ochilib qolmasligi uchun)."""
+    global _MUTEX
+    if not IS_WIN:
+        return False
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        k32.CreateMutexW.restype = wintypes.HANDLE
+        k32.CreateMutexW.argtypes = (ctypes.c_void_p, wintypes.BOOL, wintypes.LPCWSTR)
+        _MUTEX = k32.CreateMutexW(None, False, "Local\\DesktopPet_Eren_Mikasa")
+        return ctypes.get_last_error() == 183  # ERROR_ALREADY_EXISTS
+    except Exception:
+        return False
 
 
 def enable_dpi_awareness():
@@ -1006,6 +1101,10 @@ class App:
         self.menu = None
         self.ticks = 0
         self.last_clock = None
+        # kompyuter yoqilganda ishga tushish (papka ko'chirilsa, yo'l ham yangilanadi)
+        self.autostart = tk.BooleanVar(self.root, value=bool(self.settings.get("autostart", True)))
+        if IS_WIN:
+            set_autostart(self.autostart.get())
 
         counts = {}
         for name, cnt in (self.settings.get("characters") or {}).items():
@@ -1080,6 +1179,14 @@ class App:
         lier.set_state("lap_go", anim="walk")
         return True
 
+    def toggle_autostart(self):
+        on = bool(self.autostart.get())
+        set_autostart(on)
+        save_setting("autostart", on)
+        if self.pets:
+            self.pets[0].say("Endi kompyuter yoqilganda o'zim chiqaman!" if on
+                             else "Avtomatik ishga tushish o'chirildi", 4)
+
     def announce_time(self):
         ready = [p for p in self.pets if p.state in SCENE_READY or p.state == "lap_sit"]
         pet = random.choice(ready or self.pets) if self.pets else None
@@ -1121,6 +1228,9 @@ class App:
                       command=lambda: [p.sit_down() for p in self.pets])
         m.add_command(label="Bu personajni yopish", command=lambda: self.remove(pet))
         m.add_separator()
+        if IS_WIN:
+            m.add_checkbutton(label="Kompyuter yoqilganda ishga tushsin",
+                              variable=self.autostart, command=self.toggle_autostart)
         m.add_command(label="Chiqish (hammasini yopish)", command=self.quit)
         self.menu = m
         try:
@@ -1185,4 +1295,5 @@ class App:
 
 
 if __name__ == "__main__":
-    App().run()
+    if not already_running():
+        App().run()

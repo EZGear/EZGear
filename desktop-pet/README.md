@@ -42,6 +42,15 @@ GitHub'da repozitoriy → **Actions** → "Desktop Pet (Windows .exe)" → oxirg
 **DesktopPet-windows** arxivini yuklab oling. Ichidagi `img` papkasiga rasmlarni qo'ying va
 `DesktopPet.exe` ni ishga tushiring. Yoki o'zingiz `build_exe.bat` bilan yig'ishingiz mumkin.
 
+## Kompyuter yoqilganda avtomatik ishga tushish
+Dasturni **bir marta** ochsangiz kifoya — u o'zini Windows'ning avtomatik ishga tushadigan
+dasturlari ro'yxatiga yozib qo'yadi va keyin har safar kompyuter yoqilganda Eren bilan Mikasa
+o'zi chiqadi (dastur ikki marta ochilib qolmaydi).
+
+- O'chirish/yoqish: personajni o'ng tugma bilan bosing → **"Kompyuter yoqilganda ishga tushsin"**.
+- Dastur papkasini boshqa joyga ko'chirsangiz, uni yangi joydan bir marta oching — yo'l yangilanadi.
+- Windows'da ham ko'rish mumkin: Ctrl+Shift+Esc → **Автозагрузка / Startup apps** → DesktopPet.
+
 ## 3. Sozlamalar — `settings.json`
 | Kalit | Ma'nosi |
 |---|---|
@@ -51,6 +60,7 @@ GitHub'da repozitoriy → **Actions** → "Desktop Pet (Windows .exe)" → oxirg
 | `height` | Bitta rasmdan yasalganda personaj balandligi (piksel) |
 | `lap` | Kim o'tiradi, kim tizzasiga yotadi: `{"sitter": "Mikasa", "lier": "Eren"}` |
 | `clock_every_min` | Har necha daqiqada soatni aytadi (`0` — o'chirish) |
+| `autostart` | Kompyuter yoqilganda ishga tushish (`true` / `false`) |
 | `max_pets` | Ekrandagi eng ko'p personajlar soni |
 
 ## Chiqish

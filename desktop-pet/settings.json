@@ -13,5 +13,6 @@
     "sitter": "Mikasa",
     "lier": "Eren"
   },
-  "clock_every_min": 5
+  "clock_every_min": 5,
+  "autostart": true
 }
