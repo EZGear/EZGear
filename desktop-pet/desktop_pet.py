@@ -2,9 +2,11 @@
 """
 Desktop Pet — ekranda yuradigan personajlar (shimeji uslubida).
 
-Personaj rasmlari  img/<Ism>/shime1.png ... shime46.png  ko'rinishida
-saqlanadi (standart Shimeji formati). Har bir papka — bitta personaj.
-Rasmlar topilmasa, dastur vaqtinchalik oddiy shakllarni chizadi.
+Har bir personaj — img/<Ism>/ papkasi. Ichiga quyidagilardan birini qo'ying:
+  * bitta oddiy rasm (masalan Eren.png) — dastur fonni o'zi olib tashlaydi
+    va undan yurish, o'tirish, yotish, osilish kadrlarini o'zi yasaydi;
+  * yoki standart Shimeji to'plami: shime1.png ... shime46.png.
+Rasm topilmasa, dastur vaqtinchalik oddiy shakllarni chizadi.
 
 Boshqarish:
   * Sichqoncha chap tugmasi bilan ushlab sudrash va otish mumkin.
@@ -54,17 +56,23 @@ MAX_INDEX = 60
 
 DEFAULT_SETTINGS = {
     "scale": 1.0,
+    "height": 160,  # bitta rasmdan yasalganda personaj balandligi (piksel)
     "max_pets": 20,
     "characters": {"Eren": 1, "Mikasa": 1},
     # Mikasa ko'pincha Erenning orqasidan yuradi
     "follow": {"Mikasa": "Eren"},
+    # kim o'tiradi, kim uning tizzasiga boshini qo'yib yotadi
+    "lap": {"sitter": "Mikasa", "lier": "Eren"},
+    # har necha daqiqada soatni aytadi (0 = o'chirilgan)
+    "clock_every_min": 5,
 }
 
 # Shimeji rasm raqamlari bo'yicha animatsiyalar: (rasm raqami, necha tik)
 ANIM = {
     "stand": [(1, 1)],
-    "walk": [(1, 6), (2, 6), (1, 6), (3, 6)],
-    "run": [(1, 3), (2, 3), (1, 3), (3, 3)],
+    # 41-43: yon tomonga burilgan yurish kadrlari (bo'lmasa 1-3 ishlatiladi)
+    "walk": [(41, 6), (42, 6), (41, 6), (43, 6)],
+    "run": [(41, 3), (42, 3), (41, 3), (43, 3)],
     "fall": [(4, 1)],
     "jump": [(22, 1)],
     "bounce": [(18, 4), (19, 4)],
@@ -78,6 +86,8 @@ ANIM = {
     "wall_climb": [(14, 8), (12, 8), (13, 8)],
     "ceiling": [(25, 8), (23, 8), (24, 8)],
     "drag_resist": [(5, 6), (6, 6)],
+    "lap_sit": [(11, 1)],
+    "lap_lie": [(40, 1)],
 }
 
 # Biror rasm yo'q bo'lsa, o'rniga qaysi biri ishlatiladi
@@ -85,7 +95,7 @@ FALLBACK = {
     2: 1, 3: 1, 4: 1, 5: 4, 6: 5, 7: 5, 8: 5, 9: 7, 10: 8, 11: 1,
     12: 13, 13: 14, 14: 4, 15: 26, 16: 26, 17: 26, 18: 1, 19: 18,
     20: 21, 21: 11, 22: 4, 23: 24, 24: 25, 25: 4, 26: 11, 27: 26,
-    28: 26, 30: 11, 31: 11, 32: 31, 33: 31,
+    28: 26, 30: 11, 31: 11, 32: 31, 33: 31, 40: 21, 41: 1, 42: 2, 43: 3,
 }
 
 PLACEHOLDER_INDICES = sorted(set(FALLBACK) | {1})
@@ -242,10 +252,220 @@ def keyed(img):
     return bg
 
 
+# --------------------------------------------------------------------------
+# Bitta rasmdan animatsiya yasash
+# --------------------------------------------------------------------------
+
+PICTURE_EXT = (".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp")
+
+
+def remove_background(img):
+    """Shaffof bo'lmagan rasmda chetlardan boshlab bir xil fonni o'chiradi."""
+    from collections import deque
+
+    img = img.convert("RGBA")
+    if img.getchannel("A").getextrema()[0] < 250:
+        return img  # allaqachon shaffof
+    W, H = img.size
+    px = img.load()
+    bg = bytearray(W * H)
+
+    def diff(a, b):
+        return max(abs(a[0] - b[0]), abs(a[1] - b[1]), abs(a[2] - b[2]))
+
+    q = deque()
+    for x in range(W):
+        q.append((x, 0, px[x, 0]))
+        q.append((x, H - 1, px[x, H - 1]))
+    for y in range(H):
+        q.append((0, y, px[0, y]))
+        q.append((W - 1, y, px[W - 1, y]))
+    while q:
+        x, y, prev = q.popleft()
+        i = y * W + x
+        if bg[i]:
+            continue
+        c = px[x, y]
+        if diff(c, prev) > 14:
+            continue
+        bg[i] = 1
+        for nx, ny in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
+            if 0 <= nx < W and 0 <= ny < H and not bg[ny * W + nx]:
+                q.append((nx, ny, c))
+    for y in range(H):
+        row = y * W
+        for x in range(W):
+            if bg[row + x]:
+                px[x, y] = (0, 0, 0, 0)
+    return img
+
+
+def load_picture(folder):
+    """Papkadagi birinchi oddiy rasmni (shime*.png emas) qaytaradi."""
+    if not folder or not os.path.isdir(folder):
+        return None
+    for fn in sorted(os.listdir(folder)):
+        low = fn.lower()
+        if low.endswith(PICTURE_EXT) and not low.startswith("shime"):
+            try:
+                img = Image.open(os.path.join(folder, fn))
+                img.seek(0)
+                img = img.convert("RGBA")
+            except Exception:
+                continue
+            if max(img.size) > 900:  # katta rasmni kichraytirib, tezroq ishlash
+                k = 900 / max(img.size)
+                img = img.resize((int(img.width * k), int(img.height * k)), Image.LANCZOS)
+            img = remove_background(img)
+            box = img.getbbox()
+            return img.crop(box) if box else None
+    return None
+
+
+def frames_from_picture(pic, height):
+    """Bitta rasmdan shimeji raqamlaridagi kadrlarni yasaydi (kvadrat S x S)."""
+    k = height / pic.height
+    base = pic.resize((max(1, int(pic.width * k)), height), Image.LANCZOS)
+    S = height
+    bw, bh = base.size
+
+    def canvas():
+        return Image.new("RGBA", (S, S), (0, 0, 0, 0))
+
+    def place(img, dy=0):
+        c = canvas()
+        c.paste(img, ((S - img.width) // 2, S - img.height - dy), img)
+        return c
+
+    def rot_bottom(img, ang, dy=0):
+        # oyoqlar (pastki markaz) atrofida aylantirish
+        pad = Image.new("RGBA", (2 * S, 2 * img.height), (0, 0, 0, 0))
+        pad.paste(img, (S - img.width // 2, 0), img)
+        r = pad.rotate(ang, center=(S, img.height), resample=Image.BICUBIC)
+        return place(r.crop((S // 2, 0, S // 2 + S, img.height)), dy)
+
+    def rot_top(img, ang):
+        # ushlab olingan joy (bosh tepasi) atrofida tebranish
+        c = place(img)
+        top_y = S - img.height
+        return c.rotate(ang, center=(S / 2, top_y + 4), resample=Image.BICUBIC)
+
+    def squash(img, sx, sy):
+        return place(img.resize((max(1, int(img.width * sx)), max(1, int(img.height * sy))),
+                                Image.LANCZOS))
+
+    def sitting(img):
+        cut = int(img.height * 0.62)
+        top = img.crop((0, 0, img.width, cut))
+        legs = img.crop((0, cut, img.width, img.height))
+        legs = legs.resize((legs.width, max(1, int(legs.height * 0.35))), Image.LANCZOS)
+        out = Image.new("RGBA", (img.width, top.height + legs.height), (0, 0, 0, 0))
+        out.paste(top, (0, 0), top)
+        out.paste(legs, (0, top.height), legs)
+        return out
+
+    def lying(img, lift=0, ang=0):
+        r = img.rotate(90 + ang, expand=True, resample=Image.BICUBIC)  # bosh chapda
+        r = r.crop(r.getbbox())
+        if r.width > S:
+            r = r.resize((S, max(1, int(r.height * S / r.width))), Image.LANCZOS)
+        return place(r, lift)
+
+    def crotch_y(img):
+        """Oyoqlar orasidagi bo'shliq boshlanadigan qator (son boshi)."""
+        a = img.getchannel("A").load()
+        cx = img.width // 2
+        y = img.height - 1
+        while y > img.height * 0.5 and not any(a[x, y] for x in range(cx - 1, cx + 2)):
+            y -= 1
+        return y + 1
+
+    def body_end_y(img):
+        """Tana (kurtka/yubka) tugab, ingichka oyoqlar boshlanadigan qator."""
+        a = img.getchannel("A").load()
+        x0, x1 = int(img.width * 0.2), int(img.width * 0.8)
+        count = lambda y: sum(1 for x in range(x0, x1) if a[x, y])  # noqa: E731
+        ref = count(int(img.height * 0.5)) or 1
+        for y in range(int(img.height * 0.55), img.height):
+            if count(y) < ref * 0.6:
+                return y
+        return img.height
+
+    hip = min(crotch_y(base), body_end_y(base), int(bh * 0.8))
+
+    def stride(img, ang):
+        """Oyoqlarni son atrofida oldinga-orqaga tashlash."""
+        mid = img.width // 2
+        out = Image.new("RGBA", (img.width * 2, img.height + 4), (0, 0, 0, 0))
+        ox = img.width // 2
+        body = img.copy()
+        body.paste((0, 0, 0, 0), (0, hip, img.width, img.height))
+        for x0, x1, a in ((0, mid, ang), (mid, img.width, -ang)):
+            leg = img.crop((x0, hip, x1, img.height))
+            pad = Image.new("RGBA", (leg.width * 3, leg.height * 2), (0, 0, 0, 0))
+            pad.paste(leg, (leg.width, 0), leg)
+            r = pad.rotate(a, center=(leg.width * 1.5, 0), resample=Image.BICUBIC)
+            out.paste(r, (ox + x0 - leg.width, hip), r)
+        out.paste(body, (ox, 0), body)
+        box = out.getbbox()
+        return out.crop((0, 0, out.width, box[3]))
+
+    def turned(img, lean=4):
+        """Tanani chap tomonga burilgandek ko'rsatish (uzoq tomoni kichikroq)."""
+        w, h = img.size
+        nw = max(1, int(w * 0.8))
+        sq = img.resize((nw, h), Image.LANCZOS)
+        d = int(h * 0.05)
+        sq = sq.transform((nw, h), Image.QUAD, (0, -d, 0, h, nw, h, nw, 0),
+                          resample=Image.BICUBIC)
+        box = sq.getbbox()
+        sq = sq.crop(box) if box else sq
+        return rot_bottom(sq, lean)
+
+    sit = sitting(base)
+    f = {}
+    f[41] = turned(stride(base, 0))
+    f[42] = turned(stride(base, -16), 6)
+    f[43] = turned(stride(base, 16), 6)
+    f[1] = place(base)
+    f[2] = rot_bottom(base, 5, 3)
+    f[3] = rot_bottom(base, -5, 3)
+    f[4] = rot_bottom(base, 10)
+    f[5] = rot_top(base, 3)
+    f[6] = rot_top(base, -3)
+    f[7] = rot_top(base, -12)
+    f[9] = rot_top(base, -22)
+    f[8] = rot_top(base, 12)
+    f[10] = rot_top(base, 22)
+    f[11] = place(sit)
+    f[12] = rot_bottom(base, 3, 2)
+    f[13] = place(base)
+    f[14] = rot_bottom(base, -3, 2)
+    f[18] = squash(base, 1.12, 0.84)
+    f[19] = squash(base, 1.05, 0.93)
+    f[20] = lying(base, 2, 4)
+    f[21] = lying(base)
+    f[22] = squash(base, 0.94, 1.06)
+    # shiftda boshi pastga qarab yuradi
+    f[25] = f[41].transpose(Image.FLIP_TOP_BOTTOM)
+    f[23] = f[42].transpose(Image.FLIP_TOP_BOTTOM)
+    f[24] = f[43].transpose(Image.FLIP_TOP_BOTTOM)
+    f[26] = rot_bottom(sit, -3)
+    for i, a in ((15, 6), (16, -6), (17, 3), (27, -3), (28, 6)):
+        f[i] = rot_bottom(sit, a)
+    f[30] = place(sit)
+    f[31] = place(sit)
+    f[32] = place(sit, 2)
+    f[33] = rot_bottom(sit, 2, 1)
+    f[40] = lying(base, 0, -6)  # boshi biroz ko'tarilgan (tizzada)
+    return f, bw / 2
+
+
 class SpriteSet:
-    def __init__(self, name, folder, scale, use_key):
+    def __init__(self, name, folder, scale, use_key, height=160):
         self.name = name
         raw = {}
+        self.edge_half = None
         if folder and os.path.isdir(folder):
             for i in range(1, MAX_INDEX + 1):
                 p = os.path.join(folder, f"shime{i}.png")
@@ -254,33 +474,52 @@ class SpriteSet:
                         raw[i] = Image.open(p).convert("RGBA")
                     except Exception:
                         pass
+        if not raw:
+            pic = load_picture(folder)
+            if pic is not None:
+                h = max(24, int(height * (scale or 1.0)))
+                raw, self.edge_half = frames_from_picture(pic, h)
+                scale = 1.0
         self.placeholder = not raw
         if not raw:
             raw = {i: make_placeholder(i, name) for i in PLACEHOLDER_INDICES}
+            self.edge_half = 24 * (scale or 1.0)
 
         base = raw.get(1) or raw[min(raw)]
         w, h = base.size
         if scale and abs(scale - 1.0) > 1e-3:
             w, h = max(8, int(w * scale)), max(8, int(h * scale))
         self.w, self.h = w, h
+        if self.edge_half is None:
+            self.edge_half = w / 2
 
         self.left, self.right = {}, {}
+        self.tops = {}
         for i, im in raw.items():
             if im.size != (w, h):
                 im = im.resize((w, h), Image.LANCZOS)
+            box = im.getbbox()
+            self.tops[i] = box[1] if box else 0
             fl = im.transpose(Image.FLIP_LEFT_RIGHT)
             if use_key:
                 im, fl = keyed(im), keyed(fl)
             self.left[i] = ImageTk.PhotoImage(im)
             self.right[i] = ImageTk.PhotoImage(fl)
 
-    def frame(self, idx, facing_right):
+    def resolve(self, idx):
         for _ in range(8):
             if idx in self.left:
                 break
             idx = FALLBACK.get(idx, 1)
         if idx not in self.left:
             idx = 1 if 1 in self.left else min(self.left)
+        return idx
+
+    def top(self, idx):
+        return self.tops.get(self.resolve(idx), 0)
+
+    def frame(self, idx, facing_right):
+        idx = self.resolve(idx)
         # Shimeji rasmlari chapga qaragan bo'ladi
         return (self.right if facing_right else self.left)[idx]
 
@@ -291,6 +530,38 @@ class SpriteSet:
 
 FLOOR_STATES = {"stand", "walk", "run", "sit", "sit_look", "spin_head",
                 "dangle", "sprawl", "creep", "follow", "bounce"}
+SCENE_READY = FLOOR_STATES - {"bounce"}
+
+
+class Bubble:
+    """Personaj tepasida chiqadigan gap pufakchasi."""
+
+    def __init__(self, app, text, seconds):
+        self.until = time.time() + seconds
+        self.win = tk.Toplevel(app.root)
+        self.win.overrideredirect(True)
+        self.win.attributes("-topmost", True)
+        self.win.config(bg="#3a3a46")
+        font = ("Segoe UI", 12, "bold") if IS_WIN else ("Helvetica", 12, "bold")
+        self.label = tk.Label(self.win, text=text, bg="#fffaf0", fg="#2b2b33",
+                              font=font, padx=10, pady=4)
+        self.label.pack(padx=2, pady=2)
+        self.win.update_idletasks()
+        self.w = self.win.winfo_reqwidth()
+        self.h = self.win.winfo_reqheight()
+        self.pos = None
+
+    def move(self, x, y):
+        pos = (int(x - self.w / 2), int(y - self.h))
+        if pos != self.pos:
+            self.win.geometry(f"+{pos[0]}+{pos[1]}")
+            self.pos = pos
+
+    def destroy(self):
+        try:
+            self.win.destroy()
+        except tk.TclError:
+            pass
 
 
 class Pet:
@@ -299,7 +570,7 @@ class Pet:
         self.sp = sprites
         self.name = sprites.name
         L, T, R, B = app.area
-        w = sprites.w
+        w = sprites.edge_half * 2
         self.x = x if x is not None else random.uniform(L + w, max(L + w + 1, R - w))
         self.y = T  # ekranning tepasidan tushib keladi
         self.vx = random.uniform(-2, 2)
@@ -314,6 +585,9 @@ class Pet:
         self.mouse_hist = []
         self.cur_img = None
         self.cur_geom = None
+        self.cur_idx = 1
+        self.partner = None
+        self.bubble = None
         self.set_state("fall")
 
         self.win = tk.Toplevel(app.root)
@@ -336,6 +610,7 @@ class Pet:
         self.label.bind("<B1-Motion>", self.on_motion)
         self.label.bind("<ButtonRelease-1>", self.on_release)
         self.label.bind("<Button-3>", self.on_menu)
+        self.label.bind("<Double-Button-1>", lambda e: self.say_time())
         if IS_MAC:
             self.label.bind("<Button-2>", self.on_menu)
         self.render()
@@ -360,7 +635,7 @@ class Pet:
 
     def bounds(self):
         L, T, R, B = self.app.area
-        half = self.sp.w / 2
+        half = self.sp.edge_half
         return L + half, R - half, T + self.sp.h, B
 
     def leader(self):
@@ -489,11 +764,11 @@ class Pet:
             if lead is None or (self.duration and self.t > self.duration):
                 self.choose_next()
             else:
-                gap = self.sp.w * 0.55
+                gap = self.sp.edge_half * 2.2
                 goal = lead.x - gap if self.x < lead.x else lead.x + gap
                 goal = min(max(goal, xmin), xmax)
                 dx = goal - self.x
-                far = abs(dx) > self.sp.w * 3
+                far = abs(dx) > self.sp.edge_half * 6
                 speed = (5.0 if far else 2.2) * max(0.5, self.app.scale)
                 self.anim = "run" if far else "walk"
                 if abs(dx) <= speed:
@@ -532,6 +807,42 @@ class Pet:
                 self.vx = self.vy = 0
                 self.set_state("fall")
 
+        elif st == "lap_go":
+            self.y = ymax
+            pt = self.partner
+            if pt is None or pt.state != "lap_sit":
+                self.end_scene()
+            else:
+                speed = 2.2 * max(0.5, self.app.scale)
+                dx = self.target_x - self.x
+                if abs(dx) <= speed:
+                    self.x = self.target_x
+                    self.right = self.lap_side < 0  # boshi o'tirganga qarab
+                    self.set_state("lap_lie", duration=random.randint(450, 1100))
+                    try:
+                        self.win.lift()
+                    except tk.TclError:
+                        pass
+                else:
+                    self.x += speed if dx > 0 else -speed
+                    self.right = dx > 0
+
+        elif st == "lap_lie":
+            self.y = ymax
+            pt = self.partner
+            if pt is None or pt.state != "lap_sit" or self.t > self.duration:
+                self.end_scene()
+            elif self.t == 90:
+                self.say("Zzz...", 5)
+
+        elif st == "lap_sit":
+            self.y = ymax
+            pt = self.partner
+            if pt is None or pt.state not in ("lap_go", "lap_lie"):
+                self.end_scene()
+            elif pt.state == "lap_lie" and pt.t == 200 and random.random() < 0.6:
+                self.say(f"{pt.name}, uxla...", 4)
+
         else:  # stand, sit, sprawl, bounce va boshqalar
             self.y = ymax
             if self.duration is not None and self.t > self.duration:
@@ -545,6 +856,45 @@ class Pet:
         if idx is None:
             idx = self.anim_frame()
         self.render(idx)
+
+    def end_scene(self):
+        pt, self.partner = self.partner, None
+        if self.state in ("lap_go", "lap_lie", "lap_sit"):
+            self.choose_next()
+        if pt is not None and pt.partner is self:
+            pt.partner = None
+            if pt.state in ("lap_go", "lap_lie", "lap_sit"):
+                pt.choose_next()
+
+    # ---------------- gapirish ----------------
+    def say(self, text, seconds=5):
+        if self.bubble is not None:
+            self.bubble.destroy()
+        self.bubble = Bubble(self.app, text, seconds)
+        self.update_bubble()
+
+    def say_time(self):
+        t = time.strftime("%H:%M")
+        other = None
+        for p in self.app.pets:
+            if p is not self and p.name.lower() != self.name.lower():
+                other = p
+                break
+        if other is not None and random.random() < 0.5:
+            self.say(f"{other.name}, soat {t} bo'ldi!")
+        else:
+            self.say(f"Soat {t}")
+
+    def update_bubble(self):
+        b = self.bubble
+        if b is None:
+            return
+        if time.time() > b.until:
+            b.destroy()
+            self.bubble = None
+            return
+        top = self.y - self.sp.h + self.sp.top(self.cur_idx)
+        b.move(self.x, top - 4)
 
     def tick_drag(self):
         # oyoqlar kursordan biroz orqada qoladi -> tebranish
@@ -567,7 +917,8 @@ class Pet:
     def render(self, idx=None):
         if idx is None:
             idx = self.drag_idx if self.dragging else ANIM.get(self.anim, ANIM["stand"])[0][0]
-        img = self.sp.frame(idx, self.right)
+        self.cur_idx = idx
+        img = self.sp.frame(idx, self.right and not self.dragging)
         if img is not self.cur_img:
             self.label.config(image=img)
             self.cur_img = img
@@ -577,6 +928,7 @@ class Pet:
         if geom != self.cur_geom:
             self.win.geometry(f"{self.sp.w}x{self.sp.h}+{gx}+{gy}")
             self.cur_geom = geom
+        self.update_bubble()
 
     # ---------------- sichqoncha ----------------
     def on_press(self, e):
@@ -623,6 +975,9 @@ class Pet:
             self.set_state("sit", duration=random.randint(250, 500))
 
     def destroy(self):
+        if self.bubble is not None:
+            self.bubble.destroy()
+            self.bubble = None
         try:
             self.win.destroy()
         except tk.TclError:
@@ -650,6 +1005,7 @@ class App:
         self.pets = []
         self.menu = None
         self.ticks = 0
+        self.last_clock = None
 
         counts = {}
         for name, cnt in (self.settings.get("characters") or {}).items():
@@ -671,7 +1027,11 @@ class App:
     def sprite_set(self, name):
         if name not in self.sprites:
             folder = os.path.join(IMG_DIR, name)
-            self.sprites[name] = SpriteSet(name, folder, self.scale, self.use_key)
+            try:
+                height = int(self.settings.get("height", 160))
+            except (TypeError, ValueError):
+                height = 160
+            self.sprites[name] = SpriteSet(name, folder, self.scale, self.use_key, height)
         return self.sprites[name]
 
     def spawn(self, name, x=None):
@@ -680,6 +1040,51 @@ class App:
         pet = Pet(self, self.sprite_set(name), x)
         self.pets.append(pet)
         return pet
+
+    def find_lap_pair(self):
+        lap = self.settings.get("lap") or {}
+        sn = str(lap.get("sitter", "")).lower()
+        ln = str(lap.get("lier", "")).lower()
+        sitters = [p for p in self.pets if p.name.lower() == sn and p.partner is None]
+        liers = [p for p in self.pets if p.name.lower() == ln and p.partner is None]
+        if not sitters or not liers:
+            return None
+        best = min(((a, b) for a in sitters for b in liers if a is not b),
+                   key=lambda ab: abs(ab[0].x - ab[1].x), default=None)
+        return best
+
+    def start_lap(self, force=False):
+        pair = self.find_lap_pair()
+        if pair is None:
+            return False
+        sitter, lier = pair
+        if not force and not (sitter.state in SCENE_READY and lier.state in SCENE_READY):
+            return False
+        if sitter.dragging or lier.dragging:
+            return False
+        xmin, xmax, _, _ = lier.bounds()
+        off = sitter.sp.edge_half * 0.75 + lier.sp.w * 0.36
+        side = 1 if lier.x >= sitter.x else -1
+        tx = sitter.x + side * off
+        if not (xmin <= tx <= xmax):
+            side = -side
+            tx = sitter.x + side * off
+        tx = min(max(tx, xmin), xmax)
+        if sitter.state not in FLOOR_STATES:
+            sitter.vx = sitter.vy = 0
+        sitter.partner, lier.partner = lier, sitter
+        lier.lap_side = side
+        sitter.right = side > 0
+        sitter.set_state("lap_sit", anim="lap_sit")
+        lier.target_x = tx
+        lier.set_state("lap_go", anim="walk")
+        return True
+
+    def announce_time(self):
+        ready = [p for p in self.pets if p.state in SCENE_READY or p.state == "lap_sit"]
+        pet = random.choice(ready or self.pets) if self.pets else None
+        if pet is not None:
+            pet.say_time()
 
     def remove(self, pet):
         if pet in self.pets:
@@ -706,6 +1111,11 @@ class App:
         for name in self.names:
             m.add_command(label=f"{name} qo'shish", command=lambda n=name: self.spawn(n))
         m.add_separator()
+        m.add_command(label="Soat nechchi?", command=pet.say_time)
+        if self.find_lap_pair() is not None or pet.partner is not None:
+            lap = self.settings.get("lap") or {}
+            m.add_command(label=f"{lap.get('lier', '?')} {lap.get('sitter', '?')}ning tizzasiga yotsin",
+                          command=lambda: self.start_lap(force=True))
         m.add_command(label="O'tirsin", command=pet.sit_down)
         m.add_command(label="Hammasi o'tirsin",
                       command=lambda: [p.sit_down() for p in self.pets])
@@ -722,18 +1132,45 @@ class App:
         self.ticks += 1
         if self.ticks % 125 == 0:  # har 5 soniyada
             self.area = get_work_area(self.root)
-            for p in self.pets:
+            # yotgan personaj o'tirganning ustida ko'rinishi uchun oxirida ko'tariladi
+            order = sorted(self.pets, key=lambda q: q.state in ("lap_go", "lap_lie"))
+            for p in order:
                 try:
                     p.win.attributes("-topmost", True)
                     p.win.lift()
+                    if p.bubble is not None:
+                        p.bubble.win.lift()
                 except tk.TclError:
                     pass
+        if self.ticks % 25 == 0:  # har soniyada soatni tekshirish
+            self.check_clock()
+        if self.ticks % 750 == 0 and random.random() < 0.4:  # ~har 30 soniyada
+            self.start_lap()
         for p in list(self.pets):
             try:
                 p.tick()
             except tk.TclError:
                 self.pets.remove(p)
         self.root.after(TICK_MS, self.loop)
+
+    def check_clock(self):
+        try:
+            every = int(self.settings.get("clock_every_min", 5))
+        except (TypeError, ValueError):
+            every = 5
+        if every <= 0:
+            return
+        now = time.localtime()
+        key = (now.tm_hour, now.tm_min)
+        if self.last_clock is None:
+            # ishga tushgandan 3 soniya o'tib bir marta aytadi
+            if self.ticks >= 75:
+                self.last_clock = key
+                self.announce_time()
+            return
+        if key != self.last_clock and now.tm_min % every == 0:
+            self.last_clock = key
+            self.announce_time()
 
     def quit(self):
         self.close_menu()

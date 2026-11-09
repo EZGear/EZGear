@@ -1,5 +1,6 @@
 {
   "scale": 1.0,
+  "height": 160,
   "max_pets": 20,
   "characters": {
     "Eren": 1,
@@ -7,5 +8,10 @@
   },
   "follow": {
     "Mikasa": "Eren"
-  }
+  },
+  "lap": {
+    "sitter": "Mikasa",
+    "lier": "Eren"
+  },
+  "clock_every_min": 5
 }

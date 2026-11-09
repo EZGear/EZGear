@@ -1,3 +1,2 @@
-Mikasa rasmlarini shu papkaga qo'ying: shime1.png, shime2.png, ... shime46.png
-(Shimeji to'plamidagi img/Mikasa papkasidan ko'chirib qo'yish kifoya.)
-Rasmlar bo'lmasa, dastur vaqtinchalik oddiy shaklni ko'rsatadi.
+Mikasa rasmini shu papkaga qo'ying (masalan Mikasa.png) — oq fonli oddiy rasm ham bo'ladi.
+Yoki Shimeji to'plami: shime1.png ... shime46.png.

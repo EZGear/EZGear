@@ -5,15 +5,21 @@ Eren va Mikasa (Attack on Titan, High School versiyasi) — yoki istalgan boshqa
 personaj, agar uning rasmlari bo'lsa.
 
 ## Nima qila oladi
-- Ekran tepasidan tushib keladi, taskbar ustida yuradi, yuguradi, o'tiradi, yotadi, emaklaydi, sakraydi
+- Ekran tepasidan tushib keladi, taskbar ustida uyoqdan-buyoqqa yuradi (yurgan tomoniga burilib, qadam tashlab), yuguradi, o'tiradi, yotadi, emaklaydi, sakraydi
+- **Soatni aytib turadi** — har 5 daqiqada personaj tepasida "Soat 14:35" chiqadi (personajni ikki marta bossangiz ham aytadi)
+- **Mikasa o'tiradi, Eren uning tizzasiga boshini qo'yib yotadi** (o'zi vaqti-vaqti bilan, yoki menyudan)
 - Ekran chetidagi devorga tirmashib chiqadi, shiftda osilib yuradi, keyin qo'yib yuborib tushadi
 - **Mikasa ko'pincha Erenning orqasidan ergashib yuradi**
 - Sichqoncha bilan ushlab sudrash va **otib yuborish** mumkin
 - O'ng tugma bosilsa menyu chiqadi: yana Eren/Mikasa qo'shish, o'tirg'izish, yopish, chiqish
 
 ## 1. Rasmlarni joylash
-Dastur standart **Shimeji** rasm formatini ishlatadi (`shime1.png` ... `shime46.png`).
-Sizdagi Attack on Titan High School shimeji to'plamidan rasmlarni ko'chiring:
+**Eng oson yo'l — bitta rasm:** `img/Eren/` papkasiga Erenning bitta rasmini (masalan `Eren.png`),
+`img/Mikasa/` ga Mikasaning rasmini qo'ying. Dastur oq fonni o'zi olib tashlaydi va yurish,
+o'tirish, yotish, osilish harakatlarini shu rasmdan o'zi yasaydi.
+
+**Yoki Shimeji to'plami** (`shime1.png` ... `shime46.png`) — unda personaj yon tomondan chizilgan
+bo'ladi, harakatlar yanada tabiiy chiqadi:
 
 ```
 desktop-pet/
@@ -42,6 +48,9 @@ GitHub'da repozitoriy → **Actions** → "Desktop Pet (Windows .exe)" → oxirg
 | `scale` | O'lcham (masalan `0.7` — kichikroq, `1.5` — kattaroq) |
 | `characters` | Boshida nechtadan chiqishi: `{"Eren": 1, "Mikasa": 1}` |
 | `follow` | Kim kimning orqasidan yuradi: `{"Mikasa": "Eren"}` |
+| `height` | Bitta rasmdan yasalganda personaj balandligi (piksel) |
+| `lap` | Kim o'tiradi, kim tizzasiga yotadi: `{"sitter": "Mikasa", "lier": "Eren"}` |
+| `clock_every_min` | Har necha daqiqada soatni aytadi (`0` — o'chirish) |
 | `max_pets` | Ekrandagi eng ko'p personajlar soni |
 
 ## Chiqish
