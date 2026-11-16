@@ -10,7 +10,6 @@
 
 ### 👨‍💻 Men haqimda
 
-- 📚 **Hilol Nashr** uchun elektron va audio kitob do'koni frontendini qilyapman
 - 🎮 Unity'da Android uchun 2D va 3D o'yinlar ishlab chiqaman
 - 🎨 Figma maketlarini moslashuvchan (responsive) sahifalarga aylantiraman
 
