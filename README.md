@@ -2,7 +2,7 @@
 
 <img src="https://capsule-render.vercel.app/api?type=waving&color=0:0f766e,100:14b8a6&height=180&section=header&text=Assalomu%20alaykum!&fontSize=42&fontColor=ffffff&animation=fadeIn&fontAlignY=36&desc=Men%20Humoyun%20%E2%80%94%20Frontend%20va%20Unity%20dasturchi&descAlignY=58&descSize=18" width="100%" alt="header" />
 
-<img src="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=500&size=20&pause=1200&color=14B8A6&center=true&vCenter=true&width=520&lines=Vue.js+bilan+veb-ilovalar+yarataman;Unity+%26+C%23+da+mobil+o'yinlar+qilaman;Toza+UI+va+silliq+animatsiyalarni+yaxshi+ko'raman" alt="typing" />
+<img src="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=500&size=20&pause=1200&color=14B8A6&center=true&vCenter=true&width=520&lines=Vue.js+bilan+veb-ilovalar+yarataman;Unity'da+mobil+o'yinlar+qilaman;Toza+UI+va+silliq+animatsiyalarni+yaxshi+ko'raman" alt="typing" />
 
 </div>
 
@@ -17,7 +17,7 @@
 ### 🛠 Texnologiyalar
 
 <p align="center">
-  <img src="https://skillicons.dev/icons?i=vue,js,html,css,sass,unity,cs,python,git,github,vscode,figma&perline=12" alt="skills" />
+  <img src="https://skillicons.dev/icons?i=vue,js,html,css,sass,unity,github,vscode,figma&perline=9" alt="skills" />
 </p>
 
 ### 🚀 Loyihalar
@@ -43,7 +43,6 @@
       2D siluet uslubidagi hikoyali o'yin. Android uchun Unity'da yaratilgan.
       <br/><br/>
       <img src="https://img.shields.io/badge/Unity-000000?style=flat-square&logo=unity&logoColor=white" />
-      <img src="https://img.shields.io/badge/C%23-512bd4?style=flat-square&logo=dotnet&logoColor=white" />
     </td>
   </tr>
 </table>
